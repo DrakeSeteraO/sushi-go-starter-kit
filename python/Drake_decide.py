@@ -38,10 +38,6 @@ def find_missing(list1, list2):
     
     return missing
 
-# Example
-list1 = ["a", "b", "b", "c", "d"]
-list2 = ["a", "b", "d"]
-
 
 
 def decide(hand: list[str], state: GameState) -> int:
