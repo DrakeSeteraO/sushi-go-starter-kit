@@ -56,6 +56,20 @@ class GameState:
     player_count: int = 2
     hands: None | list[list[str]] = None
     enemy_cards_played: list | list[str] = []
+    card_distribution: dict[str: float] = {
+        "Tempura": 0,
+        "Sashimi": 0,
+        "Dumpling": 0,
+        "Maki Roll (1)": 0,
+        "Maki Roll (2)": 0,
+        "Maki Roll (3)": 0,
+        "Egg Nigiri": 0,
+        "Salmon Nigiri": 0,
+        "Squid Nigiri": 0,
+        "Pudding": 0,
+        "Wasabi": 0,
+        "Chopsticks": 0,
+        }
     
 
     def __post_init__(self):
