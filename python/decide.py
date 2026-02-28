@@ -1,5 +1,5 @@
 import random
-
+from collections import Counter
 import jacob_client
 
 PLAYER_NUM = {
@@ -24,9 +24,9 @@ CARD_DEFAULT_FREQUENCIES ={
     "Chopsticks": 4,
 }
 
-PRIORITY = {
-        "Wasabi":12,  # Triples next nigiri
-        "Squid Nigiri":11,  # 3 points, or 9 with wasabi
+priority = {
+        "Wasabi" : 12,  # Triples next nigiri
+        "Squid Nigiri" : 11,  # 3 points, or 9 with wasabi
         "Salmon Nigiri":10,  # 2 points, or 6 with wasabi
         "Dumpling":9,  # Increasing value
         "Egg Nigiri":8,  # 1 point, or 3 with wasabi
@@ -42,7 +42,7 @@ PRIORITY = {
 def decide(hand: list[str], state: jacob_client.GameState) -> int:
 
     if state.hands is None:
-        state.player_count = players[len(hand)]
+        state.player_count = PLAYER_NUM[len(hand)]
         state.hands = [hand.copy()]
 
     if len(state.hands) < state.hand_num:
@@ -53,23 +53,20 @@ def decide(hand: list[str], state: jacob_client.GameState) -> int:
             state.enemy_cards_played.append(item)
         state.hands[state.hand_num] = hand.copy()
 
-    # Simple priority-based strategy
 
-    return m
-
-    # If we have wasabi, prioritize nigiri
-    if state and state.has_unused_wasabi:
-        for nigiri in ["Squid Nigiri", "Salmon Nigiri", "Egg Nigiri"]:
-            if nigiri in hand:
-                return hand.index(nigiri)
-
-    # Otherwise use priority list
-    for card in priority:
-        if card in hand:
-            return hand.index(card)
+    return max(priority.values())
 
 
-    # Fallback: random
-    return random.randint(0, len(hand) - 1)
+def find_missing(list1, list2):
+    count1 = Counter(list1)
+    count2 = Counter(list2)
+
+    missing = []
+    for item, count in count1.items():
+        diff = count - count2[item]
+        if diff > 0:
+            missing.extend([item] * diff)
+
+    return missing
 
 
