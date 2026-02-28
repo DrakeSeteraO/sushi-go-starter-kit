@@ -19,6 +19,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
+from python.decide import decide
+
 # Card names used by the protocol (now using full names instead of codes)
 CARD_NAMES = {
     "Tempura": "Tempura",
@@ -50,9 +52,16 @@ class GameState:
     has_unused_wasabi: bool = False
     puddings: int = 0
 
+    hand_num: int = 0
+    player_count: int = 2
+    hands: None | list[list[str]] = None
+    enemy_cards_played: list | list[str] = []
+
     def __post_init__(self):
         if self.played_cards is None:
             self.played_cards = []
+
+
 
 
 class SushiGoClient:
@@ -169,35 +178,9 @@ class SushiGoClient:
         Returns:
             Index of the card to play (0-based)
         """
-        # Simple priority-based strategy
-        priority = [
-            "Squid Nigiri",  # 3 points, or 9 with wasabi
-            "Salmon Nigiri",  # 2 points, or 6 with wasabi
-            "Maki Roll (3)",  # 3 maki rolls
-            "Maki Roll (2)",  # 2 maki rolls
-            "Tempura",  # 5 points per pair
-            "Sashimi",  # 10 points per set of 3
-            "Dumpling",  # Increasing value
-            "Wasabi",  # Triples next nigiri
-            "Egg Nigiri",  # 1 point, or 3 with wasabi
-            "Pudding",  # End game scoring
-            "Maki Roll (1)",  # 1 maki roll
-            "Chopsticks",  # Play 2 cards next turn
-        ]
 
-        # If we have wasabi, prioritize nigiri
-        if self.state and self.state.has_unused_wasabi:
-            for nigiri in ["Squid Nigiri", "Salmon Nigiri", "Egg Nigiri"]:
-                if nigiri in hand:
-                    return hand.index(nigiri)
+        return decide(hand, self.state)
 
-        # Otherwise use priority list
-        for card in priority:
-            if card in hand:
-                return hand.index(card)
-
-        # Fallback: random
-        return random.randint(0, len(hand) - 1)
 
     def handle_message(self, message: str):
         """Handle a message from the server."""
