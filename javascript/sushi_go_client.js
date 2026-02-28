@@ -111,7 +111,9 @@ class SushiGoClient {
 
     async joinGame(gameId, playerName) {
         this.send(`JOIN ${gameId} ${playerName}`);
-        const response = await this.receive();
+        const response = await this.receiveUntil((line) =>
+            line.startsWith('WELCOME') || line.startsWith('ERROR')
+        );
 
         if (response.startsWith('WELCOME')) {
             const parts = response.split(' ');
@@ -123,6 +125,22 @@ class SushiGoClient {
             return false;
         }
         return false;
+    }
+
+    async receiveUntil(predicate) {
+        while (true) {
+            const message = await this.receive();
+            const trimmed = message.trim();
+
+            // The server sends a multi-line greeting banner on connect.
+            // Ignore blank/banner lines until we hit a protocol message.
+            if (!trimmed) {
+                continue;
+            }
+            if (predicate(trimmed)) {
+                return trimmed;
+            }
+        }
     }
 
     async signalReady() {
@@ -142,10 +160,17 @@ class SushiGoClient {
 
     parseHand(message) {
         if (message.startsWith('HAND')) {
-            const parts = message.split(' ').slice(1);
-            // New format includes indexes like "0:TMP 1:SSH 2:SAL"
-            // Extract just the card codes (everything after the colon)
-            const cards = parts.map(part => part.includes(':') ? part.split(':')[1] : part);
+            const payload = message.slice('HAND '.length);
+            const cards = [];
+            const cardPattern = /(\d+):(.*?)(?=\s\d+:|$)/g;
+            let match;
+
+            // Parse indexed cards while preserving multi-word card names.
+            while ((match = cardPattern.exec(payload)) !== null) {
+                const cardName = match[2].trim();
+                cards.push(cardName);
+            }
+
             this.state.hand = cards;
             // Update chopsticks/wasabi tracking
             this.state.hasChopsticks = this.state.playedCards.includes('Chopsticks');

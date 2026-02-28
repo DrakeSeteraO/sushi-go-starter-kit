@@ -12,32 +12,34 @@ Example:
     python sushi_go_client.py localhost 7878 abc123 MyBot
 """
 
+import random
+import re
 import socket
 import sys
-import random
 from dataclasses import dataclass
 from typing import Optional
 
 # Card names used by the protocol (now using full names instead of codes)
 CARD_NAMES = {
-    'Tempura': 'Tempura',
-    'Sashimi': 'Sashimi',
-    'Dumpling': 'Dumpling',
-    'Maki Roll (1)': 'Maki Roll (1)',
-    'Maki Roll (2)': 'Maki Roll (2)',
-    'Maki Roll (3)': 'Maki Roll (3)',
-    'Egg Nigiri': 'Egg Nigiri',
-    'Salmon Nigiri': 'Salmon Nigiri',
-    'Squid Nigiri': 'Squid Nigiri',
-    'Pudding': 'Pudding',
-    'Wasabi': 'Wasabi',
-    'Chopsticks': 'Chopsticks',
+    "Tempura": "Tempura",
+    "Sashimi": "Sashimi",
+    "Dumpling": "Dumpling",
+    "Maki Roll (1)": "Maki Roll (1)",
+    "Maki Roll (2)": "Maki Roll (2)",
+    "Maki Roll (3)": "Maki Roll (3)",
+    "Egg Nigiri": "Egg Nigiri",
+    "Salmon Nigiri": "Salmon Nigiri",
+    "Squid Nigiri": "Squid Nigiri",
+    "Pudding": "Pudding",
+    "Wasabi": "Wasabi",
+    "Chopsticks": "Chopsticks",
 }
 
 
 @dataclass
 class GameState:
     """Tracks the current state of the game."""
+
     game_id: str
     player_id: int
     hand: list[str]
@@ -61,11 +63,13 @@ class SushiGoClient:
         self.port = port
         self.sock: Optional[socket.socket] = None
         self.state: Optional[GameState] = None
+        self._recv_buffer = ""
 
     def connect(self):
         """Connect to the server."""
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
+        self._recv_buffer = ""
         print(f"Connected to {self.host}:{self.port}")
 
     def disconnect(self):
@@ -77,33 +81,42 @@ class SushiGoClient:
     def send(self, command: str):
         """Send a command to the server."""
         message = command + "\n"
-        self.sock.sendall(message.encode('utf-8'))
+        self.sock.sendall(message.encode("utf-8"))
         print(f">>> {command}")
 
     def receive(self) -> str:
-        """Receive a message from the server."""
-        data = b""
-        while b"\n" not in data:
+        """Receive one line-delimited message from the server."""
+        while True:
+            if "\n" in self._recv_buffer:
+                line, self._recv_buffer = self._recv_buffer.split("\n", 1)
+                message = line.strip()
+                print(f"<<< {message}")
+                return message
+
             chunk = self.sock.recv(4096)
             if not chunk:
                 raise ConnectionError("Server closed connection")
-            data += chunk
-        message = data.decode('utf-8').strip()
-        print(f"<<< {message}")
-        return message
+            self._recv_buffer += chunk.decode("utf-8", errors="replace")
+
+    def receive_until(self, predicate) -> str:
+        """Read lines until one matches predicate."""
+        while True:
+            message = self.receive()
+            if not message:
+                continue
+            if predicate(message):
+                return message
 
     def join_game(self, game_id: str, player_name: str) -> bool:
         """Join a game."""
         self.send(f"JOIN {game_id} {player_name}")
-        response = self.receive()
+        response = self.receive_until(
+            lambda line: line.startswith("WELCOME") or line.startswith("ERROR")
+        )
 
         if response.startswith("WELCOME"):
             parts = response.split()
-            self.state = GameState(
-                game_id=parts[1],
-                player_id=int(parts[2]),
-                hand=[]
-            )
+            self.state = GameState(game_id=parts[1], player_id=int(parts[2]), hand=[])
             return True
         elif response.startswith("ERROR"):
             print(f"Failed to join: {response}")
@@ -128,18 +141,19 @@ class SushiGoClient:
     def parse_hand(self, message: str):
         """Parse a HAND message and update state."""
         if message.startswith("HAND"):
-            parts = message.split()[1:]
-            # New format includes indexes like "0:TMP 1:SSH 2:SAL"
-            # Extract just the card codes (everything after the colon)
-            cards = [part.split(':')[1] if ':' in part else part for part in parts]
+            payload = message[len("HAND ") :]
+            cards = []
+            for match in re.finditer(r"(\d+):(.*?)(?=\s\d+:|$)", payload):
+                cards.append(match.group(2).strip())
             if self.state:
                 self.state.hand = cards
                 # Update chopsticks/wasabi tracking based on played cards
-                self.state.has_chopsticks = 'Chopsticks' in self.state.played_cards
+                self.state.has_chopsticks = "Chopsticks" in self.state.played_cards
                 self.state.has_unused_wasabi = any(
-                    c == 'Wasabi' for c in self.state.played_cards
+                    c == "Wasabi" for c in self.state.played_cards
                 ) and not any(
-                    c in ('Egg Nigiri', 'Salmon Nigiri', 'Squid Nigiri') for c in self.state.played_cards
+                    c in ("Egg Nigiri", "Salmon Nigiri", "Squid Nigiri")
+                    for c in self.state.played_cards
                 )
 
     def choose_card(self, hand: list[str]) -> int:
@@ -157,23 +171,23 @@ class SushiGoClient:
         """
         # Simple priority-based strategy
         priority = [
-            'Squid Nigiri',     # 3 points, or 9 with wasabi
-            'Salmon Nigiri',    # 2 points, or 6 with wasabi
-            'Maki Roll (3)',    # 3 maki rolls
-            'Maki Roll (2)',    # 2 maki rolls
-            'Tempura',          # 5 points per pair
-            'Sashimi',          # 10 points per set of 3
-            'Dumpling',         # Increasing value
-            'Wasabi',           # Triples next nigiri
-            'Egg Nigiri',       # 1 point, or 3 with wasabi
-            'Pudding',          # End game scoring
-            'Maki Roll (1)',    # 1 maki roll
-            'Chopsticks',       # Play 2 cards next turn
+            "Squid Nigiri",  # 3 points, or 9 with wasabi
+            "Salmon Nigiri",  # 2 points, or 6 with wasabi
+            "Maki Roll (3)",  # 3 maki rolls
+            "Maki Roll (2)",  # 2 maki rolls
+            "Tempura",  # 5 points per pair
+            "Sashimi",  # 10 points per set of 3
+            "Dumpling",  # Increasing value
+            "Wasabi",  # Triples next nigiri
+            "Egg Nigiri",  # 1 point, or 3 with wasabi
+            "Pudding",  # End game scoring
+            "Maki Roll (1)",  # 1 maki roll
+            "Chopsticks",  # Play 2 cards next turn
         ]
 
         # If we have wasabi, prioritize nigiri
         if self.state and self.state.has_unused_wasabi:
-            for nigiri in ['Squid Nigiri', 'Salmon Nigiri', 'Egg Nigiri']:
+            for nigiri in ["Squid Nigiri", "Salmon Nigiri", "Egg Nigiri"]:
                 if nigiri in hand:
                     return hand.index(nigiri)
 
