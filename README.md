@@ -26,6 +26,11 @@ python python/sushi_go_client.py localhost 7878 <game_id> <your_name>
 node javascript/sushi_go_client.js localhost 7878 <game_id> <your_name>
 ```
 
+To join a game on someone else's laptop
+```bash
+python first_card_bot.py <ip_address> <port> <game_id> <your_name>
+```
+
 Replace `<game_id>` with the game ID shown in the web UI or given to you by the tournament organizer.
 
 ## Running a Test Server
@@ -33,20 +38,20 @@ Replace `<game_id>` with the game ID shown in the web UI or given to you by the 
 First, load the server image from the LAN:
 
 ```bash
-curl https://joes-macbook.tail10906.ts.net/sushi-go-test.tar | docker load
+curl -O https://joes-macbook.tail10906.ts.net/sushi-go-test.tar && docker load < sushi-go-test.tar
 ```
 
 or 
 
 ```bash
-curl http://joes-macbook.local:9090/sushi-go-test.tar | docker load
+curl -O http://joes-macbook.local:9090/sushi-go-test.tar && docker load < sushi-go-test.tar
 ```
 
 
 Then start it:
 
 ```bash
-docker run -p 7878:7878 -p 8080:8080 sushi-go-test
+docker run -it -p 7878:7878 -p 8080:8080 sushi-go-test
 ```
 
 - **Port 7878** — TCP game port (where your bot connects)
